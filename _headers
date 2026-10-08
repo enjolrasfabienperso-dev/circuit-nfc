@@ -1,0 +1,28 @@
+# En-têtes Netlify (ignorés par GitHub Pages, qui ne permet pas de les régler).
+/*
+  X-Robots-Tag: noindex, nofollow, noimageindex
+  Referrer-Policy: no-referrer
+  X-Content-Type-Options: nosniff
+
+/
+  Cache-Control: no-store
+/generateur.html
+  Cache-Control: no-store
+/generateur
+  Cache-Control: no-store
+/image.html
+  Cache-Control: no-store
+/image
+  Cache-Control: no-store
+/admin.html
+  Cache-Control: no-store
+/admin
+  Cache-Control: no-store
+/images.json
+  Cache-Control: no-store
+/images/*
+  Cache-Control: no-store
+/config.js
+  Cache-Control: no-store
+/commun.js
+  Cache-Control: no-store

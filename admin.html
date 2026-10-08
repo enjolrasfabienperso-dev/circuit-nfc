@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="data:,">
+<meta http-equiv="Cache-Control" content="no-store">
+<title>Administration</title>
+<style>
+  :root { --fond: #f4f5f8; --carte: #fff; --texte: #1b1b1f; --gris: #6b6f7b; --ligne: #e1e3ea; --rouge: #c62828; --vert: #2e7d32; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--fond); color: var(--texte); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 44rem; margin: 0 auto; padding: 1rem 1rem 4rem; }
+  h1 { font-size: 1.35rem; margin: .5rem 0 1rem; }
+  h2 { font-size: 1.05rem; margin: 0 0 .7rem; }
+  .carte { background: var(--carte); border: 1px solid var(--ligne); border-radius: 1rem; padding: 1rem; margin-bottom: 1rem; }
+  .connexion { min-height: 80vh; display: flex; align-items: center; justify-content: center; }
+  .connexion form { width: min(100%, 22rem); display: grid; gap: .7rem; }
+  input[type=password], input[type=text] { width: 100%; font: inherit; font-size: 1.05rem; padding: .75rem .9rem; border: 1.5px solid var(--ligne); border-radius: .7rem; background: #fff; }
+  button, .bouton { appearance: none; border: 0; border-radius: .7rem; padding: .7rem 1rem; font: inherit; font-weight: 600;
+           background: var(--texte); color: #fff; cursor: pointer; touch-action: manipulation; display: inline-block; text-align: center; }
+  button.secondaire, .bouton.secondaire { background: #e8e9ef; color: var(--texte); }
+  button.danger { background: #fdecec; color: var(--rouge); }
+  button:disabled { opacity: .45; cursor: default; }
+  .erreur { color: var(--rouge); min-height: 1.3em; margin: 0; font-size: .95rem; }
+  .info { color: var(--gris); font-size: .92rem; margin: .4rem 0; }
+  ol.doc { margin: .2rem 0 0; padding-left: 1.3rem; line-height: 1.5; }
+  .apercu { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+  .apercu figure { margin: 0; text-align: center; }
+  .apercu .vignette { width: 100%; aspect-ratio: 1; background: #111; border-radius: .7rem; overflow: hidden; display: flex; align-items: center; justify-content: center; color: #888; font-size: .85rem; }
+  .apercu img { width: 100%; height: 100%; object-fit: contain; }
+  .apercu figcaption { font-size: .85rem; margin-top: .35rem; word-break: break-all; }
+  ul.liste { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+  ul.liste li { display: grid; grid-template-columns: 4rem 1fr; gap: .7rem; align-items: center; border: 1px solid var(--ligne); border-radius: .8rem; padding: .5rem; }
+  ul.liste img { width: 4rem; height: 4rem; object-fit: cover; border-radius: .5rem; background: #111; }
+  .nom { font-size: .9rem; word-break: break-all; }
+  .etat { font-size: .78rem; color: var(--gris); }
+  .etat.nouv { color: var(--vert); font-weight: 600; }
+  .etat.ret { color: var(--rouge); }
+  .actions { display: flex; gap: .4rem; margin-top: .4rem; flex-wrap: wrap; }
+  .actions button { padding: .4rem .7rem; font-size: .85rem; }
+  .rangee { display: flex; gap: .6rem; flex-wrap: wrap; }
+  .rangee > * { flex: 1 1 12rem; }
+  label.ajout { display: block; }
+  label.ajout input { display: none; }
+  pre, code.bloc { display: block; white-space: pre-wrap; word-break: break-all; background: #f0f1f5; padding: .6rem; border-radius: .5rem; font-size: .82rem; }
+  details summary { cursor: pointer; font-weight: 600; }
+  details > div { margin-top: .8rem; display: grid; gap: .6rem; }
+</style>
+</head>
+<body>
+<main id="app">
+  <div class="connexion">
+    <form id="f-connexion" autocomplete="off">
+      <h1>Administration</h1>
+      <input type="password" id="mdp" aria-label="Mot de passe" placeholder="Mot de passe" autocomplete="current-password">
+      <button type="submit">Entrer</button>
+      <p class="erreur" id="err"></p>
+    </form>
+  </div>
+</main>
+<script src="config.js"></script>
+<script src="commun.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.Commun, CFG = window.CIRCUIT_CONFIG || {};
+  var NOM = /^[A-Za-z0-9][A-Za-z0-9._-]*\.(jpe?g|png|webp|gif|avif)$/i;
+  // Chaque entrée : { nom, origine: 'site'|'nouvelle', fichier?: File, url?: objectURL, nomOriginal? }
+  var entrees = [], retirees = [];
+
+  document.getElementById('f-connexion').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var champ = document.getElementById('mdp'), err = document.getElementById('err');
+    var v = champ.value; champ.value = '';
+    C.sha256hex(v).then(function (h) {
+      if (!h) { err.textContent = 'Navigateur non compatible (contexte HTTPS requis).'; return; }
+      if (h !== CFG.motDePasseAdmin) { err.textContent = 'Mot de passe incorrect.'; return; }
+      demarrer();
+    });
+  });
+
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+
+  function demarrer() {
+    var app = document.getElementById('app');
+    app.innerHTML =
+      '<h1>Réservoir d’images</h1>' +
+      '<section class="carte"><h2>Publier une nouvelle image</h2><ol class="doc">' +
+      '<li>Copie les images dans le dossier <b>images/</b> du dépôt.</li>' +
+      '<li>Remplace <b>images.json</b> par celui téléchargé ici, puis commit/push (ou glisser-déposer du dossier sur Netlify).</li>' +
+      '</ol><p class="info">Le fichier ZIP contient déjà <b>images.json</b> et <b>images/</b> : décompresse-le à la racine du site. ' +
+      'Une image retirée de la liste n’est plus affichée ; tu peux aussi supprimer son fichier de <b>images/</b>.</p></section>' +
+      '<section class="carte"><h2>Aperçu</h2><div class="apercu" id="apercu"></div></section>' +
+      '<section class="carte"><h2>Images (<span id="nb">0</span>)</h2>' +
+      '<p class="info" id="charge">Chargement de images.json…</p>' +
+      '<ul class="liste" id="liste"></ul>' +
+      '<div class="rangee" style="margin-top:.8rem">' +
+      '<label class="ajout bouton secondaire">+ Ajouter des images<input type="file" id="ajout" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" multiple></label>' +
+      '</div></section>' +
+      '<section class="carte"><h2>Préparer les fichiers</h2>' +
+      '<div class="rangee"><button id="zip">Préparer les fichiers (ZIP)</button>' +
+      '<button class="secondaire" id="json">images.json seul</button></div>' +
+      '<p class="info" id="etatprep"></p></section>' +
+      '<section class="carte"><details><summary>Outils : mot de passe et puces</summary><div>' +
+      '<p class="info">Les valeurs ci-dessous se reportent dans <b>config.js</b> (empreintes SHA-256). Rien n’est enregistré.</p>' +
+      '<input type="text" id="nmdp" placeholder="Nouveau mot de passe" autocomplete="off">' +
+      '<button class="secondaire" id="hmdp">Calculer l’empreinte</button><code class="bloc" id="rmdp" hidden></code>' +
+      '<button class="secondaire" id="gfrag">Générer un nouveau fragment de puce</button><code class="bloc" id="rfrag" hidden></code>' +
+      '</div></details></section>';
+
+    document.getElementById('ajout').addEventListener('change', ajouter);
+    document.getElementById('zip').addEventListener('click', preparerZip);
+    document.getElementById('json').addEventListener('click', function () {
+      telecharger(new Blob([jsonTexte()], { type: 'application/json' }), 'images.json');
+    });
+    document.getElementById('hmdp').addEventListener('click', function () {
+      var v = document.getElementById('nmdp').value, out = document.getElementById('rmdp');
+      if (!v) return;
+      C.sha256hex(v).then(function (h) { out.hidden = false; out.textContent = 'motDePasseAdmin: "' + h + '"'; });
+    });
+    document.getElementById('gfrag').addEventListener('click', function () {
+      var b = new Uint8Array(32); crypto.getRandomValues(b);
+      var k = btoa(String.fromCharCode.apply(null, b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      C.sha256hex(k).then(function (h) {
+        var out = document.getElementById('rfrag'); out.hidden = false;
+        out.textContent = 'À écrire dans la puce : …/page.html#k=' + k + '\nEmpreinte pour config.js : "' + h + '"';
+      });
+    });
+
+    fetch('images.json?d=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw 0; return r.json(); })
+      .then(function (l) {
+        (Array.isArray(l) ? l : []).forEach(function (x) {
+          var n = typeof x === 'string' ? x : (x && x.fichier) || '';
+          if (NOM.test(n)) entrees.push({ nom: n, origine: 'site' });
+        });
+        document.getElementById('charge').textContent = entrees.length ? '' : 'Réservoir vide : la page image reste vide tant qu’aucune image n’est publiée.';
+        rendre();
+      })
+      .catch(function () {
+        document.getElementById('charge').textContent = 'images.json introuvable ou illisible : on part d’une liste vide.';
+        rendre();
+      });
+  }
+
+  function src(e) { return e.url || ('images/' + encodeURIComponent(e.nom) + '?d=' + C.creneau()); }
+
+  function rendre() {
+    var ul = document.getElementById('liste');
+    document.getElementById('nb').textContent = entrees.length;
+    ul.innerHTML = '';
+    entrees.forEach(function (e, i) {
+      var li = document.createElement('li');
+      li.innerHTML = '<img alt="" loading="lazy" src="' + esc(src(e)) + '">' +
+        '<div><div class="nom">' + esc(e.nom) + '</div>' +
+        '<div class="etat ' + (e.origine === 'nouvelle' ? 'nouv' : '') + '">' +
+        (e.origine === 'nouvelle' ? 'Nouvelle' + (e.nomOriginal ? ' (' + esc(e.nomOriginal) + ')' : '') : 'En ligne') + '</div>' +
+        '<div class="actions"><button class="secondaire" data-a="haut"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
+        '<button class="secondaire" data-a="bas"' + (i === entrees.length - 1 ? ' disabled' : '') + '>↓</button>' +
+        '<button class="danger" data-a="ret">Retirer</button></div></div>';
+      li.querySelectorAll('button').forEach(function (b) {
+        b.addEventListener('click', function () { action(b.getAttribute('data-a'), i); });
+      });
+      ul.appendChild(li);
+    });
+    rendreApercu();
+  }
+
+  function action(a, i) {
+    if (a === 'haut' && i > 0) { var t = entrees[i - 1]; entrees[i - 1] = entrees[i]; entrees[i] = t; }
+    if (a === 'bas' && i < entrees.length - 1) { var u = entrees[i + 1]; entrees[i + 1] = entrees[i]; entrees[i] = u; }
+    if (a === 'ret') {
+      var e = entrees.splice(i, 1)[0];
+      if (e.url) URL.revokeObjectURL(e.url);
+      if (e.origine === 'site') retirees.push(e.nom);
+    }
+    rendre();
+  }
+
+  function rendreApercu() {
+    var idx = C.indexJour(new Date()), n = entrees.length, box = document.getElementById('apercu');
+    function fig(titre, k) {
+      if (!n) return '<figure><div class="vignette">Aucune image</div><figcaption>' + titre + ' : page vide</figcaption></figure>';
+      var e = entrees[C.mod(k, n)];
+      return '<figure><div class="vignette"><img alt="" src="' + esc(src(e)) + '"></div><figcaption>' + titre + ' : ' + esc(e.nom) + '</figcaption></figure>';
+    }
+    box.innerHTML = fig('Aujourd’hui', idx) + fig('Demain', idx + 1);
+  }
+
+  function nomSur(f) {
+    var ext = ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' })[f.type];
+    if (!ext) {
+      var m = /\.([a-z0-9]+)$/i.exec(f.name || '');
+      ext = m ? m[1].toLowerCase().replace('jpeg', 'jpg') : '';
+    }
+    if (!/^(jpg|png|webp|gif|avif)$/.test(ext)) return '';
+    var b = new Uint8Array(4); crypto.getRandomValues(b);
+    var hex = Array.prototype.map.call(b, function (x) { return x.toString(16).padStart(2, '0'); }).join('');
+    return C.creneau().replace(/-/g, '') + '-' + hex + '.' + ext;
+  }
+
+  function ajouter(ev) {
+    var refus = 0;
+    Array.prototype.forEach.call(ev.target.files || [], function (f) {
+      var n = nomSur(f);
+      if (!n) { refus++; return; }
+      entrees.push({ nom: n, origine: 'nouvelle', fichier: f, url: URL.createObjectURL(f), nomOriginal: f.name });
+    });
+    ev.target.value = '';
+    document.getElementById('charge').textContent = refus ? refus + ' fichier(s) ignoré(s) : formats acceptés JPG, PNG, WebP, GIF, AVIF.' : '';
+    rendre();
+  }
+
+  function jsonTexte() { return JSON.stringify(entrees.map(function (e) { return e.nom; }), null, 2) + '\n'; }
+
+  function telecharger(blob, nom) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = nom;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+  }
+
+  // --- ZIP minimal (méthode "stockée", sans compression, sans dépendance) ---
+  var TABLE = (function () {
+    var t = new Uint32Array(256);
+    for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+    return t;
+  })();
+  function crc32(u8) { var c = 0xffffffff; for (var i = 0; i < u8.length; i++) c = TABLE[(c ^ u8[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+  function zip(fichiers) { // [{nom, data: Uint8Array}]
+    var enc = new TextEncoder(), parts = [], central = [], offset = 0;
+    var d = new Date();
+    var heure = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    var date = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    fichiers.forEach(function (f) {
+      var nom = enc.encode(f.nom), crc = crc32(f.data), taille = f.data.length;
+      var h = new DataView(new ArrayBuffer(30));
+      h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+      h.setUint16(10, heure, true); h.setUint16(12, date, true); h.setUint32(14, crc, true);
+      h.setUint32(18, taille, true); h.setUint32(22, taille, true); h.setUint16(26, nom.length, true); h.setUint16(28, 0, true);
+      parts.push(new Uint8Array(h.buffer), nom, f.data);
+      var c = new DataView(new ArrayBuffer(46));
+      c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true);
+      c.setUint16(10, 0, true); c.setUint16(12, heure, true); c.setUint16(14, date, true); c.setUint32(16, crc, true);
+      c.setUint32(20, taille, true); c.setUint32(24, taille, true); c.setUint16(28, nom.length, true);
+      c.setUint16(30, 0, true); c.setUint16(32, 0, true); c.setUint16(34, 0, true); c.setUint16(36, 0, true);
+      c.setUint32(38, 0, true); c.setUint32(42, offset, true);
+      central.push(new Uint8Array(c.buffer), nom);
+      offset += 30 + nom.length + taille;
+    });
+    var tailleCentral = central.reduce(function (s, p) { return s + p.length; }, 0);
+    var e = new DataView(new ArrayBuffer(22));
+    e.setUint32(0, 0x06054b50, true); e.setUint16(8, fichiers.length, true); e.setUint16(10, fichiers.length, true);
+    e.setUint32(12, tailleCentral, true); e.setUint32(16, offset, true);
+    return new Blob(parts.concat(central, [new Uint8Array(e.buffer)]), { type: 'application/zip' });
+  }
+
+  function preparerZip() {
+    var etat = document.getElementById('etatprep');
+    var nouvelles = entrees.filter(function (e) { return e.origine === 'nouvelle'; });
+    etat.textContent = 'Préparation…';
+    Promise.all(nouvelles.map(function (e) {
+      return e.fichier.arrayBuffer().then(function (b) { return { nom: 'images/' + e.nom, data: new Uint8Array(b) }; });
+    })).then(function (imgs) {
+      var fichiers = [{ nom: 'images.json', data: new TextEncoder().encode(jsonTexte()) }].concat(imgs);
+      telecharger(zip(fichiers), 'reservoir-' + C.creneau() + '.zip');
+      etat.textContent = 'ZIP prêt : images.json + ' + imgs.length + ' nouvelle(s) image(s).' +
+        (retirees.length ? ' Fichiers retirés (à supprimer de images/ si tu veux) : ' + retirees.join(', ') : '');
+    }).catch(function () { etat.textContent = 'Échec de la préparation.'; });
+  }
+})();
+</script>
+</body>
+</html>
